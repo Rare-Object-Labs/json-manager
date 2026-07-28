@@ -9,7 +9,8 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: '{{DISPLAY_NAME}}' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('navigation')).toBeInTheDocument()
-    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
+    expect(screen.getByText('{{DESCRIPTION}}')).toBeInTheDocument()
+    expect(screen.getByText('{{POC_DOMAIN}}')).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
   })
 })
