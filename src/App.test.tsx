@@ -55,7 +55,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Reload from Disk' })).toBeEnabled()
   })
 
-  it('offers file selection when no JSON_MANAGER_FILE is configured', async () => {
+  it('offers file selection whenever the app starts with no active file', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ configured: false })))
 
     render(<App />)

@@ -1,26 +1,9 @@
 import type { Plugin } from 'vite'
 import { createApiMiddleware, type ApiMiddleware } from './api'
-import { resolveJsonManagerFile } from './env'
+import { createFileState } from './file-state'
 import { pickJsonFile } from './select-file'
 
-interface FileState {
-  jsonFile: () => string | undefined
-  setJsonFile: (filePath: string) => void
-}
-
-function createFileState(initialPath: string | undefined): FileState {
-  let filePath: string | undefined = initialPath
-  return {
-    jsonFile: () => filePath,
-    setJsonFile: (next) => {
-      filePath = next
-    },
-  }
-}
-
 export function jsonManagerApi(): Plugin {
-  let mode = 'development'
-  let envDir = process.cwd()
   let api: ApiMiddleware = createApiMiddleware({
     jsonFile: () => undefined,
     setJsonFile: () => undefined,
@@ -29,10 +12,8 @@ export function jsonManagerApi(): Plugin {
 
   return {
     name: 'json-manager-api',
-    configResolved(config) {
-      mode = config.mode
-      envDir = typeof config.envDir === 'string' ? config.envDir : config.root
-      const state = createFileState(resolveJsonManagerFile(mode, envDir, process.env))
+    configResolved() {
+      const state = createFileState()
       api = createApiMiddleware({
         jsonFile: state.jsonFile,
         setJsonFile: state.setJsonFile,

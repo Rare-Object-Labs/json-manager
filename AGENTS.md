@@ -5,8 +5,8 @@ This repository is the `JSON Manager` application, created from the reusable `ap
 ## Working agreement
 
 - Keep the application a local utility. The only backend surface is the small Node file API in `server/`; keep it minimal and restricted to reading and writing the currently active JSON file.
-- The API keeps an in-memory active-file path seeded from `JSON_MANAGER_FILE` at startup. The native file chooser (`POST /api/select-file`) is Windows-only and powered by PowerShell/Windows Forms via `node:child_process`; do not add a cross-platform abstraction, do not persist recent-file history or settings.
-- Do not add a database, authentication, Supabase, cloud storage, deployment work, or unnecessary frameworks/libraries.
+- The API keeps an in-memory active-file path for the current server session only. It is never seeded by an environment variable or a previous selection: every server start begins with no active file, and the user must explicitly choose one with the native file picker (`POST /api/select-file`, Windows-only, PowerShell/Windows Forms via `node:child_process`). Do not add automatic loading, recent-file history, favorites, or settings persistence, and do not add a cross-platform abstraction.
+- Do not add a database, authentication, Supabase, cloud storage, or unnecessary frameworks/libraries.
 - Do not add JSX runtime dependencies or a UI framework; prefer plain CSS.
 - Use React, TypeScript, and Vite; preserve strict TypeScript checks.
 - Preserve record IDs, ZIP strings, unknown properties, and existing values; never silently normalize or renumber data.
@@ -14,8 +14,8 @@ This repository is the `JSON Manager` application, created from the reusable `ap
 - Keep product behavior out of the starter. Add features only when requirements call for them.
 - Never expose secrets in client code, the filesystem path in browser code, or commit local environment files or local JSON data.
 - Update documentation when architecture or project conventions change.
-- Treat Porkbun registration, Cloudflare DNS, Cloudflare Pages hosting, and GitHub source control as external deployment concerns; do not configure or create those resources without explicit authorization.
-- Use `json-manager.rareobjectlabs.app` as the default POC domain unless the project specifies a different one.
+- Treat Porkbun registration, Cloudflare DNS, the Cloudflare Tunnel, and GitHub source control as external deployment concerns; do not configure or create those resources without explicit authorization.
+- Use `jsonmanager.rareobjectlabs.app` as the app's hosted POC domain unless the project specifies a different one.
 
 ## Required validation
 
@@ -37,15 +37,15 @@ This project was created from the `app-starter` template with:
 - Repository name: `json-manager`
 - Folder name: `json-manager`
 - Description: `A local web application for viewing, editing, adding, and deleting records in a structured JSON file.`
-- POC domain: `json-manager.rareobjectlabs.app`
+- Hosted POC domain: `jsonmanager.rareobjectlabs.app`
 
 ## Deployment convention
 
 - Registrar: Porkbun
 - DNS provider: Cloudflare
-- POC hosting: Cloudflare Pages
+- POC hosting: local Node server accessed via a Cloudflare Tunnel
 - Source control: GitHub
 - Umbrella domain: `rareobjectlabs.app`
-- Default POC domain: `json-manager.rareobjectlabs.app`
+- Hosted POC domain: `jsonmanager.rareobjectlabs.app` → Cloudflare Tunnel → `http://127.0.0.1:4173`
 
 This is documentation metadata only. Do not add provider-specific application code to implement it.

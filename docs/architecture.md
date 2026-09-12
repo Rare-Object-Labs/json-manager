@@ -2,32 +2,35 @@
 
 ## Overview
 
-`json-manager` is a client-side React application written in TypeScript and built with Vite, paired with a small local Node file API that reads and writes one JSON file from disk.
+`json-manager` is a client-side React application written in TypeScript and built with Vite, paired with a small local Node file API (`server/`) that reads and writes one JSON file from disk.
 
 ## Current structure
 
 ```text
 Browser
   └─ React component tree (src/)
-      └─ Vite dev/preview server
-          └─ JSON Manager API middleware (server/)
-              ├─ resolves the active JSON file (env or chooser)
-              ├─ returns records to the browser
-              ├─ validates saved documents
-              ├─ creates timestamped backups in db-backups/
-              └─ writes back to the original file atomically
+      ├─ Vite dev server          (npm run dev)
+      │     └─ JSON Manager API middleware (server/plugin.ts)
+      └─ Production server        (npm run start)
+            ├─ Node built-in HTTP server (server/index.ts)
+            │     ├─ serves the built frontend from dist/  (server/static.ts)
+            │     └─ JSON Manager API middleware (server/api.ts)
+            └─ shared API support
+                  ├─ validates saved documents
+                  ├─ creates timestamped backups in db-backups/
+                  └─ writes back to the original file atomically
 ```
 
-The API is registered as Vite middleware via a small plugin (`server/plugin.ts`), so it runs inside the dev server (`npm run dev`) and the preview server for built output (`npm run preview`) without a separate process or an HTTP framework. It uses only Node built-ins (`node:fs`, `node:path`, `node:child_process`).
+The API middleware (`server/api.ts`) is shared: Vite registers it through the plugin for `npm run dev`, and the production server (`server/index.ts`) mounts the same middleware for `/api/*` while serving `dist/` with a small Node static file handler. Both paths use only Node built-ins (`node:fs`, `node:path`, `node:http`, `node:child_process`); there is no Express or other HTTP framework.
 
 ## Active file state
 
-The API keeps an in-memory active-file path. At startup the plugin initializes it from `JSON_MANAGER_FILE` when configured; otherwise it starts empty and the app shows a "no file selected" state. Choosing a file through the dialog replaces the active path only after the file has been read and validated. Saved documents and backups always target the currently active file. No recent-file history or settings persistence exists.
+The API keeps an in-memory active-file path for the current server session only, initialized to **nothing** on every start. There is no environment variable, `.env` value, previous selection, history, or any other mechanism that can preload a file. The active path changes only when `POST /api/select-file` returns a validated file, and it is used for all subsequent reads, saves, and backups. Restarting the server clears it. No recent-file history or settings persistence exists.
 
 ## File API surface
 
-- `GET /api/records` — reads and validates the active file and returns `{ configured, fileName, struct }`. If no file is active it returns `{ configured: false }`.
-- `POST /api/save` — receives `{ content }`, validates the JSON and the `_default` structure, copies the current file into `db-backups/`, then writes the re-serialized document to the active path through a temporary file plus rename.
+- `GET /api/records` — reads and validates the active file and returns `{ configured, fileName, struct }`. Because no file is ever auto-loaded, a freshly started server returns `{ configured: false }`.
+- `POST /api/save` — receives `{ content }`, validates the JSON and the `_default` structure, copies the current file into `db-backups/`, then writes the re-serialized document to the active path through a temporary file plus rename. Without an active file it returns `not_configured`.
 - `POST /api/select-file` — opens a native Windows file dialog, verifies and validates the selected file, and only then makes it the active file, returning the same shape as `GET /api/records` (`{ cancelled: true }` when the user cancels).
 
 Errors are returned as `{ error: { code, message } }` with readable messages. The full filesystem path is never sent to the browser; the UI only receives the filename.
@@ -35,6 +38,16 @@ Errors are returned as `{ error: { code, message } }` with readable messages. Th
 ## Windows file chooser
 
 The app is Windows-focused. The chooser (`server/select-file.ts`) invokes `powershell.exe` with a small `System.Windows.Forms.OpenFileDialog` script, filtered to `JSON files (*.json)` and `All files (*.*)`. There is no npm dependency and no cross-platform abstraction; on non-Windows platforms the endpoint reports that the chooser requires Windows. The browser-side `<input type="file">` is deliberately not used because it does not expose a filesystem path the local API can later save back to.
+
+## Production server
+
+`npm run start` runs `server/index.ts` with Node directly (Node runs the TypeScript with native type stripping; see `tsconfig.node.json` `allowImportingTsExtensions` for the `.ts` import style). It:
+
+- refuses to start with a clear message if `dist/index.html` is missing (`npm run build` first)
+- serves the built frontend from `dist` with correct MIME types and traversal protection (`server/static.ts`)
+- mounts the shared API middleware for `/api/*`
+- listens on `http://127.0.0.1:4173` by default (`HOST`/`PORT` environment variables may override)
+- always starts with no file selected
 
 ## Data model rules
 
@@ -46,38 +59,37 @@ The app is Windows-focused. The chooser (`server/select-file.ts`) invokes `power
 
 ## Tooling
 
-- Vite provides local development, production bundling, and the preview server that hosts the API.
+- Vite provides local development and production bundling of the frontend.
+- The production server is a plain Node built-in HTTP server; the API middleware is shared with the Vite plugin.
 - React and TypeScript provide the UI and static type checking.
 - ESLint enforces baseline code quality rules.
 - Vitest and Testing Library provide unit and component tests for both `src/` and `server/`.
 
 ## Boundaries
 
-JSON Manager has no server runtime beyond the local middleware, no database, no authentication layer, no payment integration, and no external API dependency. All durable state lives in the currently active local file; the active-file path itself is in-memory and reset on restart.
+JSON Manager has no database, authentication layer, payment integration, cloud storage, or external API dependency. Its only backend surface is the local Node file API. All durable state lives in the currently active local file; the active-file path itself is in-memory and reset on restart.
 
 ## Deployment foundation
 
-The standard proof-of-concept delivery path is:
+The intended proof-of-concept hosting runs the production server locally behind a Cloudflare Tunnel:
 
 ```text
-GitHub source repository
-  └─ Cloudflare Pages static deployment
-      └─ Cloudflare-managed DNS
-          └─ json-manager.rareobjectlabs.app
-              └─ Registered under rareobjectlabs.app at Porkbun
+https://jsonmanager.rareobjectlabs.app
+  -> Cloudflare Tunnel
+  -> http://127.0.0.1:4173
+  -> local JSON Manager Node server
+  -> explicitly selected local JSON file
 ```
 
 - Porkbun is the domain registrar.
-- Cloudflare is the DNS provider.
-- Cloudflare Pages hosts the POC static build.
+- Cloudflare is the DNS provider and hosts the tunnel.
+- The Node production server (`npm run start`) listens on `127.0.0.1:4173`.
 - GitHub provides source control.
 - `rareobjectlabs.app` is the umbrella domain.
-- Each app uses a POC domain, defaulting to `json-manager.rareobjectlabs.app`.
+- The app's hosted POC domain is `jsonmanager.rareobjectlabs.app`.
 
-For example, repositories may be published at `stackmap.rareobjectlabs.app` or `parenting-time.rareobjectlabs.app`.
-
-These services are deployment infrastructure, not application runtime dependencies. The starter contains no Cloudflare-specific application code and does not provision hosting or DNS.
+The Cloudflare Tunnel, DNS records, and registration are deployment infrastructure, not application runtime dependencies. This repository contains no tunnel or DNS configuration and provisions nothing.
 
 ## Configuration
 
-`POC_DOMAIN` is deployment metadata and is populated with `json-manager.rareobjectlabs.app` for this project. `JSON_MANAGER_FILE` is Node-side configuration that seeds the active file at startup and is never exposed to browser code; the UI only displays the filename. Public runtime configuration may use Vite environment variables prefixed with `VITE_`. Secrets must not be placed in frontend environment variables.
+`POC_DOMAIN` is deployment metadata populated with `jsonmanager.rareobjectlabs.app` for this project. There is no application configuration that controls file selection: the active file is always chosen manually in the UI on every server start.

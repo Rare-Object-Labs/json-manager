@@ -37,11 +37,14 @@ Data rules the app follows:
 
 ## How it works
 
-The React frontend is served by Vite. A small local Node API is registered as Vite middleware, so it runs inside the same process as the dev server (`npm run dev`) and the preview server for built output (`npm run preview`). It only uses Node built-ins (`node:fs`, `node:path`, the HTTP request/response passed by Vite).
+The React frontend is built with Vite. A small local Node API (`server/`) provides everything the frontend needs: loading the active JSON file, choosing a file with a native Windows dialog, validating, saving with backups, and atomic writes.
+
+- In development (`npm run dev`) the API is registered as Vite middleware and runs inside the Vite process.
+- In production (`npm run start`) the same API is served by a small Node built-in HTTP server (`server/index.ts`) that also serves the built frontend from `dist`.
 
 The API:
 
-- loads the current JSON file and returns its records
+- never loads a JSON file automatically; the active file is always chosen by the user with **Choose File**
 - lets the user choose a different JSON file at any time through a native Windows file dialog (see below)
 - validates that the file is valid JSON with a `_default` object
 - validates every saved document before writing
@@ -50,48 +53,62 @@ The API:
 
 ## Prerequisites
 
-- Node.js 22 or newer
+- Node.js 22.18 or newer (`npm run start` runs TypeScript directly and needs native type-stripping support)
 - npm 10 or newer
 
 ## Getting started
 
 1. Install dependencies with `npm install`.
-2. Point the app at your JSON file (see below).
-3. Run `npm run dev` and open the URL Vite prints.
+2. Run `npm run dev` and open the URL Vite prints.
+3. Click **Choose File** and select the JSON file you want to manage.
 
-## Pointing it at your db.json
+The app never opens a file on its own. Every server start begins with **No file selected**, and the selected file is kept in memory only for that server session.
 
-The app manages one JSON file at a time. There are two ways to choose it:
+## Choosing a file
 
-**From the UI (recommended).** Click **Choose File** in the header. The app opens a native Windows file dialog (powered by PowerShell and Windows Forms) that filters for `*.json` files. The app reads and validates the chosen file before making it the active file, and still writes saves and backups to exactly that file. If you have unsaved edits, you are asked for confirmation before switching. Selecting a file never modifies it.
+The app manages one JSON file at a time, and **you always choose it from the UI — there is no automatic loading.** Click **Choose File** in the header. The app opens a native Windows file dialog (powered by PowerShell and Windows Forms) that filters for `*.json` files. The app reads and validates the chosen file before making it the active file, and still writes saves and backups to exactly that file. If you have unsaved edits, you are asked for confirmation before switching. Selecting a file never modifies it.
+
+The selected file is the only thing the API reads and writes for the rest of that server session. Restarting the server clears the selection: on restart you must choose the file again. No recent-file history, favorites, or remembered paths exist.
 
 > The chooser is currently Windows-only. It is the primary mechanism because a browser file input does not expose a filesystem path the local API can later save back to.
-
-**At startup with an environment variable.** The `JSON_MANAGER_FILE` environment variable on the Node side is still supported as the initial/default file. Set it to an absolute path to your JSON file.
-
-PowerShell, for one session:
-
-```powershell
-$env:JSON_MANAGER_FILE = "C:\path\to\db.json"
-npm run dev
-```
-
-Or create a `.env.local` file in this project (it is git-ignored) with:
-
-```text
-JSON_MANAGER_FILE=C:\path\to\db.json
-```
-
-If `JSON_MANAGER_FILE` is unset, the app starts with no file selected and offers **Choose File** instead of blocking on a configuration screen.
 
 ## Available commands
 
 - `npm run dev` starts the Vite development server with the local file API.
-- `npm run build` type-checks and creates a production build in `dist`.
-- `npm run preview` serves the built app with the local file API enabled.
+- `npm run build` type-checks and creates a production build in `dist` (plus the API used by `npm run start`).
+- `npm run start` starts the production server for the built app. It fails with a clear message if `dist` has not been built, so always run `npm run build` first.
+- `npm run preview` serves a built `dist` through Vite's preview server with the local file API enabled (development convenience).
 - `npm run lint` checks the codebase with ESLint.
 - `npm test` runs the Vitest test suite once.
 - `npm run test:watch` runs Vitest in watch mode.
+
+## Running the production server
+
+```text
+npm run build
+npm run start
+```
+
+`npm run start` runs `server/index.ts` with Node directly (no build step for the server) and:
+
+- serves the built frontend from `dist`
+- serves the same `/api/*` routes as development (records, save, select-file)
+- listens on `127.0.0.1:4173` by default
+- always starts with no file selected — tell the user to click **Choose File**
+
+## Production hosting
+
+The intended hosted setup runs the production server locally behind a Cloudflare Tunnel:
+
+```text
+https://jsonmanager.rareobjectlabs.app
+  -> Cloudflare Tunnel
+  -> http://127.0.0.1:4173
+  -> local JSON Manager Node server
+  -> explicitly selected local JSON file
+```
+
+The Cloudflare Tunnel, DNS records, and registration are external deployment concerns and are not configured in this repository.
 
 ## Backups
 
@@ -113,7 +130,8 @@ Every table column except **Actions** is sortable by clicking its header: click 
 
 ## Environment variables
 
-- `JSON_MANAGER_FILE` — Node-side path to the initial JSON file to manage. Not exposed to browser code; the UI only shows the filename. When unset, use **Choose File** in the app to pick a file.
+There are no application environment variables. JSON Manager never loads a JSON file automatically, so there is nothing to configure for a startup file — the active file is always chosen with **Choose File**.
+
 - `POC_DOMAIN` — deployment metadata, not exposed to browser code.
 - Browser-visible variables must use the `VITE_` prefix. Do not commit secrets.
 
@@ -121,13 +139,18 @@ Every table column except **Actions** is sortable by clicking its header: click 
 
 Proof-of-concept deployments follow this convention:
 
+```text
+https://jsonmanager.rareobjectlabs.app
+  -> Cloudflare Tunnel
+  -> http://127.0.0.1:4173
+```
+
 - Registrar: Porkbun
 - DNS provider: Cloudflare
-- POC hosting: Cloudflare Pages
+- POC hosting: local Node server accessed via a Cloudflare Tunnel
 - Source control: GitHub
 - Umbrella domain: `rareobjectlabs.app`
-- App POC domain: `json-manager.rareobjectlabs.app`
-- Default POC domain: `json-manager.rareobjectlabs.app`
+- App POC domain: `jsonmanager.rareobjectlabs.app`
 
 This template documents the convention only. Cloudflare configuration, DNS records, and deployment setup are performed separately.
 
@@ -135,7 +158,7 @@ This template documents the convention only. Cloudflare configuration, DNS recor
 
 ```text
 src/                  React application, components, and tests
-server/               Local Node file API (validation, backups, atomic writes)
+server/               Local Node file API and production server entry
 docs/                 Product, architecture, and decision records
 index.html             Vite HTML entry point
 vite.config.ts         Vite and Vitest configuration
@@ -144,7 +167,7 @@ eslint.config.js       ESLint flat configuration
 
 ## Testing
 
-`npm test` runs Vitest. Coverage includes parsing and rejecting the `_default` structure, preserving ZIP strings, next-ID calculation, add/edit/delete operations, serialization, backup/atomic-write behavior, client-side table sorting, the choose-file API flow (cancel, switch, invalid files, save/backup of the new file), and the app's no-file-selected state.
+`npm test` runs Vitest. Coverage includes parsing and rejecting the `_default` structure, preserving ZIP strings, next-ID calculation, add/edit/delete operations, serialization, backup/atomic-write behavior, client-side table sorting, the no-auto-load startup state, the choose-file API flow (cancel, switch, invalid files, save/backup of the new file), and the production server's static file serving.
 
 ## Customizing the template
 
@@ -154,6 +177,6 @@ This project was created from the `app-starter` template with these values:
 - Repository name: `json-manager`
 - Folder name: `json-manager`
 - Description: `A local web application for viewing, editing, adding, and deleting records in a structured JSON file.`
-- POC domain: `json-manager.rareobjectlabs.app`
+- Hosted POC domain: `jsonmanager.rareobjectlabs.app`
 
 The neutral starter shell has been extended with the JSON Manager interface and a small local file API.

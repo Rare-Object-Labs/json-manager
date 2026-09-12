@@ -293,9 +293,8 @@ export default function App() {
           <section className="empty-state">
             <h2>No file selected</h2>
             <p>
-              JSON Manager reads and edits one structured JSON file at a time. Click Choose File to
-              pick a file, or set the <code>JSON_MANAGER_FILE</code> environment variable before
-              starting the app to open one automatically.
+              JSON Manager reads and edits one structured JSON file at a time. It never loads a
+              file automatically — click Choose File and pick the file you want to manage.
             </p>
             <button
               type="button"

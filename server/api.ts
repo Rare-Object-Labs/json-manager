@@ -5,13 +5,13 @@ import {
   parseJsonStructure,
   serializeJson,
   type StructureErrorCode,
-} from './db'
+} from './db.ts'
 import {
   atomicWrite,
   createBackup,
   readTextFile,
-} from './persistence'
-import type { FilePickResult } from './select-file'
+} from './persistence.ts'
+import type { FilePickResult } from './select-file.ts'
 
 export interface ApiDeps {
   jsonFile: () => string | undefined
@@ -128,9 +128,14 @@ async function handleSave(
   res: ServerResponse,
   deps: ApiDeps,
 ): Promise<void> {
-  const filePath = deps.jsonFile()
+const filePath = deps.jsonFile()
   if (!filePath) {
-    return sendError(res, 400, 'not_configured', 'JSON_MANAGER_FILE is not set.')
+    return sendError(
+      res,
+      400,
+      'not_configured',
+      'No file is selected. Use Choose File in the app to select one.',
+    )
   }
 
   let body: unknown

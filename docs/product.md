@@ -27,7 +27,7 @@ Individuals who maintain a local structured JSON file (for example, a record sto
 
 ### Initial scope
 
-- Choose the current file from the UI (native Windows chooser) or seed it from `JSON_MANAGER_FILE` at startup.
+- Choose the current file from the UI (native Windows chooser). The app never loads a file automatically — every start begins with no file selected and the user must click Choose File.
 - The `_default` structure described in the README, with string object keys and ZIP codes kept as strings.
 - Client-side sorting and filtering of the visible table.
 - Unsaved-change tracking and confirmation prompts to prevent accidental loss.
@@ -35,10 +35,11 @@ Individuals who maintain a local structured JSON file (for example, a record sto
 
 ### Explicit non-goals
 
-- No database, authentication, Supabase, cloud storage, deployment, or hosting.
+- No database, authentication, Supabase, cloud storage, or hosting.
 - No user accounts, sharing, or multi-user editing.
+- No automatic file loading of any kind (no environment variable, `.env` value, previous selection, recent-file history, or remembered path).
 - No file-path display in the browser beyond the filename.
-- No recent-file history or settings persistence; the active file resets when the app restarts.
+- No recent-file history or settings persistence; the active file resets when the app restarts and must be chosen manually.
 - No cross-platform file-chooser abstraction (the native chooser is Windows-only for now).
 
 ### Success measurement

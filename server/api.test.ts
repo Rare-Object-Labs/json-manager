@@ -111,6 +111,20 @@ describe('GET /api/records without an active file', () => {
   })
 })
 
+describe('POST /api/save without an active file', () => {
+  it('rejects the save with not_configured so a file must be chosen first', async () => {
+    const { deps } = makeDeps()
+    const result = await request(
+      createApiMiddleware(deps),
+      'POST',
+      '/api/save',
+      JSON.stringify({ content: validContent({ '1': { name: 'A' } }) }),
+    )
+    expect(result.status).toBe(400)
+    expect(jsonBody(result).error?.code).toBe('not_configured')
+  })
+})
+
 describe('POST /api/select-file', () => {
   it('cancelling selection leaves the active file unchanged', async () => {
     const { deps, active } = makeDeps()
