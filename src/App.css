@@ -115,6 +115,16 @@
   border-radius: 0.5rem;
 }
 
+.save-note {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 0.5rem;
+}
+
 .empty-state {
   max-width: 42rem;
   padding: 1.5rem 1.75rem;
@@ -156,6 +166,18 @@
 
 .error-banner strong {
   font-size: 0.9rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .search {

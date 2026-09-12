@@ -1,20 +1,22 @@
 # Agent Guidance
 
-This repository is the `JSON Manager` application, created from the reusable `app-starter` frontend template and extended with a small local Node file API (see ADR-004).
+This repository is the `JSON Manager` application, created from the reusable `app-starter` frontend template.
 
 ## Working agreement
 
-- Keep the application a local utility. The only backend surface is the small Node file API in `server/`; keep it minimal and restricted to reading and writing the currently active JSON file.
-- The API keeps an in-memory active-file path for the current server session only. It is never seeded by an environment variable or a previous selection: every server start begins with no active file, and the user must explicitly choose one with the native file picker (`POST /api/select-file`, Windows-only, PowerShell/Windows Forms via `node:child_process`). Do not add automatic loading, recent-file history, favorites, or settings persistence, and do not add a cross-platform abstraction.
+- Keep the application frontend-only. All file access happens in the browser: the File System Access API (`window.showOpenFilePicker`) where supported, and a plain `<input type="file">` plus a download-based save otherwise. There is no backend, no server directory, and no `/api/*` endpoints.
+- Files stay on the user's computer; file contents must never be uploaded, transmitted, or stored off-device. Do not send file data to any service.
 - Do not add a database, authentication, Supabase, cloud storage, or unnecessary frameworks/libraries.
 - Do not add JSX runtime dependencies or a UI framework; prefer plain CSS.
 - Use React, TypeScript, and Vite; preserve strict TypeScript checks.
 - Preserve record IDs, ZIP strings, unknown properties, and existing values; never silently normalize or renumber data.
+- Never auto-load a JSON file: every page load begins with no file selected, and the user must choose one with **Choose File**. Do not add recent-file history, favorites, settings persistence, or environment-based file paths.
+- No backups or automatic file writes: the original file changes only on an explicit **Save Changes**. In fallback browsers, saving downloads the updated file instead of overwriting the original.
 - Prefer small, accessible components and plain CSS over unnecessary dependencies.
 - Keep product behavior out of the starter. Add features only when requirements call for them.
-- Never expose secrets in client code, the filesystem path in browser code, or commit local environment files or local JSON data.
+- Never expose secrets in client code or commit local environment files or local JSON data.
 - Update documentation when architecture or project conventions change.
-- Treat Porkbun registration, Cloudflare DNS, the Cloudflare Tunnel, and GitHub source control as external deployment concerns; do not configure or create those resources without explicit authorization.
+- Treat Porkbun registration, Cloudflare DNS, Cloudflare Pages, and GitHub source control as external deployment concerns; do not configure or create those resources without explicit authorization.
 - Use `jsonmanager.rareobjectlabs.app` as the app's hosted POC domain unless the project specifies a different one.
 
 ## Required validation
@@ -43,9 +45,9 @@ This project was created from the `app-starter` template with:
 
 - Registrar: Porkbun
 - DNS provider: Cloudflare
-- POC hosting: local Node server accessed via a Cloudflare Tunnel
+- POC hosting: Cloudflare Pages (static frontend)
 - Source control: GitHub
 - Umbrella domain: `rareobjectlabs.app`
-- Hosted POC domain: `jsonmanager.rareobjectlabs.app` → Cloudflare Tunnel → `http://127.0.0.1:4173`
+- Hosted POC domain: `jsonmanager.rareobjectlabs.app` → Cloudflare Pages → static build of the frontend
 
 This is documentation metadata only. Do not add provider-specific application code to implement it.

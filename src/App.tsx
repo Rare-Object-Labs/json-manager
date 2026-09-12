@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchRecords, saveChanges, selectFile } from './api'
-import type { ApiError } from './api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import {
   applyAdd,
   applyDelete,
@@ -8,112 +7,110 @@ import {
   cloneJson,
   matchesSearch,
   nextNumericId,
+  parseJsonStructure,
   recordName,
   serializeJson,
   sortedEntries,
   sortRows,
 } from './lib/db'
 import type { DatabaseFile, SortDirection, SortKey } from './lib/db'
+import {
+  downloadJsonText,
+  pickJsonFile,
+  readFileText,
+  readHandleText,
+  supportsFileSystemAccess,
+  writeHandleText,
+} from './lib/files'
+import type { FileSystemFileHandleLike } from './lib/files'
 import { RecordForm } from './components/RecordForm'
 import { RecordTable } from './components/RecordTable'
 import type { TableRow } from './components/RecordTable'
 import './App.css'
 
-type LoadStatus = 'loading' | 'ready' | 'error'
-
 type EditorState = null | { mode: 'add' } | { mode: 'edit'; id: string }
 
+interface FileError {
+  code: string
+  message: string
+}
+
 const ERROR_TITLES: Record<string, string> = {
-  not_configured: 'Not configured',
-  file_not_found: 'File not found',
   invalid_json: 'Invalid JSON',
   invalid_root: 'Invalid file structure',
   invalid_default: 'Missing or invalid "_default"',
   invalid_record_structure: 'Invalid record structure',
-  permission_denied: 'Permission denied',
-  backup_failed: 'Backup failed',
-  save_failed: 'Save failed',
+  read_failed: 'Could not read the file',
+  write_failed: 'Save failed',
   picker_failed: 'File chooser error',
-  network: 'Connection problem',
-  unexpected: 'Unexpected error',
+}
+
+const STRUCTURE_MESSAGES: Record<string, string> = {
+  invalid_json: 'The file is not valid JSON.',
+  invalid_root: 'The file must contain an object at its top level.',
+  invalid_default: 'The file must contain an object named "_default".',
+  invalid_record_structure: 'Every record under "_default" must be an object.',
 }
 
 function errorTitle(code: string): string {
   return ERROR_TITLES[code] ?? 'Error'
 }
 
+function structureMessage(code: string): string {
+  return STRUCTURE_MESSAGES[code] ?? 'The file does not match the expected structure.'
+}
+
 export default function App() {
-  const [status, setStatus] = useState<LoadStatus>('loading')
   const [fileName, setFileName] = useState('')
+  const [fileHandle, setFileHandle] = useState<FileSystemFileHandleLike | null>(null)
+  const [fallbackMode, setFallbackMode] = useState(false)
   const [working, setWorking] = useState<DatabaseFile | null>(null)
   const [snapshotText, setSnapshotText] = useState('')
-  const [loadError, setLoadError] = useState<ApiError | null>(null)
-  const [fileError, setFileError] = useState<ApiError | null>(null)
-  const [saveError, setSaveError] = useState<ApiError | null>(null)
+  const [loadError, setLoadError] = useState<FileError | null>(null)
+  const [saveError, setSaveError] = useState<FileError | null>(null)
+  const [saveNotice, setSaveNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [editor, setEditor] = useState<EditorState>(null)
   const [sortKey, setSortKey] = useState<SortKey>('id')
   const [sortDir, setSortDir] = useState<SortDirection>('asc')
+  const fallbackInputRef = useRef<HTMLInputElement>(null)
 
   const workingText = useMemo(() => (working ? serializeJson(working) : ''), [working])
   const dirty = working !== null && workingText !== snapshotText
   const recordCount = working ? Object.keys(working._default).length : 0
 
-  const applyFile = useCallback((nextFileName: string, struct: DatabaseFile) => {
-    const fresh = cloneJson(struct)
-    setFileName(nextFileName)
-    setWorking(fresh)
-    setSnapshotText(serializeJson(fresh))
+  const clearErrors = useCallback(() => {
     setLoadError(null)
-    setFileError(null)
     setSaveError(null)
-    setStatus('ready')
-    setSearch('')
-    setEditor(null)
+    setSaveNotice('')
   }, [])
 
-  const loadResult = useCallback(
-    (result: Awaited<ReturnType<typeof fetchRecords>>) => {
+  const applyDocument = useCallback(
+    (
+      text: string,
+      nextFileName: string,
+      handle: FileSystemFileHandleLike | null,
+      fallback: boolean,
+    ): boolean => {
+      const result = parseJsonStructure(text)
       if (!result.ok) {
-        setStatus('error')
-        setLoadError(result.error)
-        return
+        setLoadError({ code: result.code, message: structureMessage(result.code) })
+        return false
       }
-      const data = result.data
-      if (!data.configured) {
-        setFileName('')
-        setWorking(null)
-        setSnapshotText('')
-        setLoadError(null)
-        setSaveError(null)
-        setStatus('ready')
-        return
-      }
-      if (!data.struct || typeof data.fileName !== 'string') {
-        setStatus('error')
-        setLoadError({
-          code: 'unexpected',
-          message: 'The local API returned an unexpected response.',
-        })
-        return
-      }
-      applyFile(data.fileName, data.struct)
+      const struct = cloneJson(result.struct)
+      setFileName(nextFileName)
+      setFileHandle(handle)
+      setFallbackMode(fallback)
+      setWorking(struct)
+      setSnapshotText(serializeJson(struct))
+      setSearch('')
+      setEditor(null)
+      clearErrors()
+      return true
     },
-    [applyFile],
+    [clearErrors],
   )
-
-  useEffect(() => {
-    let cancelled = false
-    void fetchRecords().then((result) => {
-      if (!cancelled) {
-        loadResult(result)
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [loadResult])
 
   useEffect(() => {
     if (!dirty) {
@@ -127,42 +124,71 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [dirty])
 
-  async function reloadFromDisk() {
-    if (dirty && !window.confirm('Discard unsaved changes and reload the file from disk?')) {
-      return
-    }
-    setBusy(true)
-    const result = await fetchRecords()
-    loadResult(result)
-    setBusy(false)
-  }
-
   async function handleChooseFile() {
     if (dirty && !window.confirm('Discard unsaved changes and choose a different JSON file?')) {
       return
     }
+    clearErrors()
+    if (supportsFileSystemAccess()) {
+      setBusy(true)
+      let handle: FileSystemFileHandleLike | null
+      try {
+        handle = await pickJsonFile()
+      } catch {
+        setLoadError({ code: 'picker_failed', message: 'The file chooser could not be opened.' })
+        setBusy(false)
+        return
+      }
+      if (!handle) {
+        setBusy(false)
+        return
+      }
+      try {
+        const text = await readHandleText(handle)
+        applyDocument(text, handle.name, handle, false)
+      } catch {
+        setLoadError({ code: 'read_failed', message: 'The selected file could not be read.' })
+      }
+      setBusy(false)
+      return
+    }
+    setFallbackMode(true)
+    fallbackInputRef.current?.click()
+  }
+
+  async function handleFallbackFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
     setBusy(true)
-    setFileError(null)
-    const result = await selectFile()
-    if (!result.ok) {
-      setFileError(result.error)
+    clearErrors()
+    if (!file) {
       setBusy(false)
       return
     }
-    const data = result.data
-    if (data.cancelled) {
-      setBusy(false)
+    try {
+      const text = await readFileText(file)
+      applyDocument(text, file.name, null, true)
+    } catch {
+      setLoadError({ code: 'read_failed', message: 'The selected file could not be read.' })
+    }
+    setBusy(false)
+  }
+
+  async function handleReload() {
+    if (dirty && !window.confirm('Discard unsaved changes and reload the file from disk?')) {
       return
     }
-    if (!data.configured || !data.struct || typeof data.fileName !== 'string') {
-      setFileError({
-        code: 'unexpected',
-        message: 'The local API returned an unexpected response.',
-      })
-      setBusy(false)
+    if (!fileHandle) {
       return
     }
-    applyFile(data.fileName, data.struct)
+    setBusy(true)
+    clearErrors()
+    try {
+      const text = await readHandleText(fileHandle)
+      applyDocument(text, fileHandle.name, fileHandle, false)
+    } catch {
+      setLoadError({ code: 'read_failed', message: 'The file could not be read back from disk.' })
+    }
     setBusy(false)
   }
 
@@ -170,13 +196,28 @@ export default function App() {
     if (!working || !dirty) {
       return
     }
+    const text = workingText
+    const result = parseJsonStructure(text)
+    if (!result.ok) {
+      setSaveError({ code: result.code, message: 'Unsaved changes produced an invalid file.' })
+      return
+    }
     setBusy(true)
     setSaveError(null)
-    const result = await saveChanges(workingText)
-    if (result.ok) {
-      setSnapshotText(workingText)
-    } else {
-      setSaveError(result.error)
+    setSaveNotice('')
+    try {
+      if (fileHandle) {
+        await writeHandleText(fileHandle, text)
+        setSnapshotText(text)
+      } else {
+        downloadJsonText(fileName, text)
+        setSnapshotText(text)
+        setSaveNotice(
+          `Saved. Your browser cannot overwrite the original file, so the updated JSON was downloaded as "${fileName}".`,
+        )
+      }
+    } catch {
+      setSaveError({ code: 'write_failed', message: 'The file could not be saved back to disk.' })
     }
     setBusy(false)
   }
@@ -253,12 +294,7 @@ export default function App() {
           <span>
             {recordCount} {recordCount === 1 ? 'record' : 'records'}
           </span>
-          <button
-            type="button"
-            className="button"
-            onClick={handleChooseFile}
-            disabled={busy || status === 'loading'}
-          >
+          <button type="button" className="button" onClick={handleChooseFile} disabled={busy}>
             Choose File
           </button>
         </div>
@@ -266,8 +302,8 @@ export default function App() {
           <button
             type="button"
             className="button"
-            onClick={reloadFromDisk}
-            disabled={status !== 'ready' || !fileName || busy}
+            onClick={handleReload}
+            disabled={!fileHandle || busy}
           >
             Reload from Disk
           </button>
@@ -275,7 +311,7 @@ export default function App() {
             type="button"
             className="button primary"
             onClick={handleSave}
-            disabled={!dirty || busy || status !== 'ready'}
+            disabled={!dirty || busy || !working}
           >
             Save Changes
           </button>
@@ -283,13 +319,27 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {status === 'loading' && (
-          <p className="notice" role="status">
-            Loading records…
+        {loadError && (
+          <div className="error-banner" role="alert">
+            <strong>{errorTitle(loadError.code)}</strong>
+            <span>{loadError.message}</span>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="error-banner" role="alert">
+            <strong>{errorTitle(saveError.code)}</strong>
+            <span>{saveError.message}</span>
+          </div>
+        )}
+
+        {saveNotice && (
+          <p className="save-note" role="status">
+            {saveNotice}
           </p>
         )}
 
-        {status === 'ready' && !fileName && (
+        {!fileName && (
           <section className="empty-state">
             <h2>No file selected</h2>
             <p>
@@ -307,28 +357,14 @@ export default function App() {
           </section>
         )}
 
-        {status === 'error' && loadError && (
-          <div className="error-banner" role="alert">
-            <strong>{errorTitle(loadError.code)}</strong>
-            <span>{loadError.message}</span>
-          </div>
+        {fileName && fallbackMode && (
+          <p className="notice" role="status">
+            This browser cannot overwrite the original file, so Save Changes downloads the updated
+            JSON instead.
+          </p>
         )}
 
-        {fileError && (
-          <div className="error-banner" role="alert">
-            <strong>{errorTitle(fileError.code)}</strong>
-            <span>{fileError.message}</span>
-          </div>
-        )}
-
-        {saveError && (
-          <div className="error-banner" role="alert">
-            <strong>{errorTitle(saveError.code)}</strong>
-            <span>{saveError.message}</span>
-          </div>
-        )}
-
-        {status === 'ready' && working && (
+        {fileName && working && (
           <>
             <div className="main-toolbar">
               <div className="search">
@@ -341,7 +377,11 @@ export default function App() {
                   placeholder="ID, name, city…"
                 />
               </div>
-              <button type="button" className="button primary" onClick={() => setEditor({ mode: 'add' })}>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => setEditor({ mode: 'add' })}
+              >
                 Add Entry
               </button>
             </div>
@@ -363,17 +403,23 @@ export default function App() {
         )}
       </main>
 
-      {status === 'ready' && editor && working && (
+      {editor && working && (
         <RecordForm
           mode={editor.mode}
           idText={editor.mode === 'edit' ? editor.id : addRecordId}
-          initial={
-            editor.mode === 'edit' ? (working._default[editor.id] ?? {}) : {}
-          }
+          initial={editor.mode === 'edit' ? (working._default[editor.id] ?? {}) : {}}
           onCancel={() => setEditor(null)}
           onSubmit={handleSubmitDraft}
         />
       )}
+
+      <input
+        ref={fallbackInputRef}
+        type="file"
+        accept=".json,application/json"
+        className="visually-hidden"
+        onChange={handleFallbackFile}
+      />
     </div>
   )
 }

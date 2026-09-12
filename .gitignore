@@ -10,9 +10,8 @@ coverage/
 .env.local
 .env.*.local
 
-# Local JSON data file and automatic backups
+# Local JSON data file
 db.json
-db-backups/
 
 # Local test data
 test-data/
