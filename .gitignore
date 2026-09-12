@@ -14,6 +14,9 @@ coverage/
 db.json
 db-backups/
 
+# Local test data
+test-data/
+
 # Editor and operating-system files
 .vscode/*
 !.vscode/extensions.json
