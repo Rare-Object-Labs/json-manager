@@ -6,7 +6,7 @@ Record durable technical choices here so future contributors understand their co
 
 **Status:** Accepted
 
-**Context:** `{{DISPLAY_NAME}}` needs a lightweight, reusable frontend foundation.
+**Context:** `JSON Manager` needs a lightweight, reusable frontend foundation.
 
 **Decision:** Use React for the user interface, TypeScript for static checks, and Vite for development and production builds.
 
@@ -28,9 +28,19 @@ Record durable technical choices here so future contributors understand their co
 
 **Context:** Applications created from the starter need a consistent proof-of-concept publishing convention without coupling application code to deployment providers.
 
-**Decision:** Use GitHub for source control, Cloudflare Pages for POC hosting, Cloudflare for DNS, and Porkbun as the registrar for the `rareobjectlabs.app` umbrella domain. Each application uses `{{POC_DOMAIN}}`, which defaults to `{{REPO_NAME}}.rareobjectlabs.app`.
+**Decision:** Use GitHub for source control, Cloudflare Pages for POC hosting, Cloudflare for DNS, and Porkbun as the registrar for the `rareobjectlabs.app` umbrella domain. Each application uses a POC domain, which for this project is `json-manager.rareobjectlabs.app`.
 
 **Consequences:** POC URLs are predictable across applications. DNS and hosting remain external configuration concerns; this decision adds no Cloudflare-specific application code and provisions no resources.
+
+## ADR-004: Small local Node file API
+
+**Status:** Accepted
+
+**Context:** JSON Manager must read and write an existing local JSON file that acts like a database for the user. A browser-only frontend cannot do this safely; it needs a small Node-side layer.
+
+**Decision:** Keep the React + TypeScript + Vite frontend, and add the smallest practical local Node API as Vite middleware using only Node built-ins (`node:fs`, `node:path`, the HTTP request/response objects Vite provides). No Express, database, authentication, or external service. The file path is configured with the Node-side `JSON_MANAGER_FILE` environment variable and is never sent to the browser.
+
+**Consequences:** The app runs entirely locally in the Vite dev/preview server process. Saves go through a validated backup-then-atomic-write sequence so the original file stays intact on any failure. This is an explicit exception to the starter's frontend-only default, documented here and in the architecture notes.
 
 ## New decision template
 

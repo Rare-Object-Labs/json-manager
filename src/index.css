@@ -17,10 +17,6 @@
   box-sizing: border-box;
 }
 
-html {
-  scroll-behavior: smooth;
-}
-
 body {
   min-width: 20rem;
   min-height: 100vh;
@@ -36,4 +32,10 @@ a:focus-visible {
   border-radius: 0.2rem;
   outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
   outline-offset: 3px;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 1px;
 }

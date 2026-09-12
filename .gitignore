@@ -10,6 +10,10 @@ coverage/
 .env.local
 .env.*.local
 
+# Local JSON data file and automatic backups
+db.json
+db-backups/
+
 # Editor and operating-system files
 .vscode/*
 !.vscode/extensions.json
