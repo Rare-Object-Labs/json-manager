@@ -13,6 +13,15 @@ export interface RecordsResponse {
   error?: ApiError
 }
 
+export interface SelectFileResponse {
+  cancelled?: boolean
+  configured?: boolean
+  fileName?: string
+  defaultName?: string
+  struct?: DatabaseFile
+  error?: ApiError
+}
+
 export interface SaveResponse {
   ok?: boolean
   error?: ApiError
@@ -47,6 +56,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<RequestResu
 
 export function fetchRecords(): Promise<RequestResult<RecordsResponse>> {
   return request<RecordsResponse>('/api/records')
+}
+
+export function selectFile(): Promise<RequestResult<SelectFileResponse>> {
+  return request<SelectFileResponse>('/api/select-file', { method: 'POST' })
 }
 
 export function saveChanges(content: string): Promise<RequestResult<SaveResponse>> {

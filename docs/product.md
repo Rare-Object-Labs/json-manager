@@ -18,16 +18,18 @@ Individuals who maintain a local structured JSON file (for example, a record sto
 
 ### Primary user outcomes
 
-- View records in a readable table and search across all fields.
+- View records in a readable table, search across all fields, and sort by any table column.
 - Add, edit, and delete records with auto-assigned IDs.
+- Switch between JSON files from inside the app using a native Windows file dialog.
 - Save back to the same file only when explicitly requested.
 - Have the original file preserved by a timestamped backup before every save.
-- Get clear messages instead of crashes when the file is missing, invalid, or unreadable.
+- Get clear messages instead of crashes when the file is missing, invalid, unreadable, or fails to validate.
 
 ### Initial scope
 
-- A single local JSON file configured through `JSON_MANAGER_FILE`.
+- Choose the current file from the UI (native Windows chooser) or seed it from `JSON_MANAGER_FILE` at startup.
 - The `_default` structure described in the README, with string object keys and ZIP codes kept as strings.
+- Client-side sorting and filtering of the visible table.
 - Unsaved-change tracking and confirmation prompts to prevent accidental loss.
 - Plain CSS admin-style interface; no UI framework.
 
@@ -36,6 +38,8 @@ Individuals who maintain a local structured JSON file (for example, a record sto
 - No database, authentication, Supabase, cloud storage, deployment, or hosting.
 - No user accounts, sharing, or multi-user editing.
 - No file-path display in the browser beyond the filename.
+- No recent-file history or settings persistence; the active file resets when the app restarts.
+- No cross-platform file-chooser abstraction (the native chooser is Windows-only for now).
 
 ### Success measurement
 

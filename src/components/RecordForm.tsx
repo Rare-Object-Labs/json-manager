@@ -3,7 +3,7 @@ import type { FormEvent, MouseEvent } from 'react'
 import { RECORD_FIELDS, type RecordField } from '../lib/db'
 
 const FORM_FIELDS: Array<{ key: RecordField; label: string }> = [
-  { key: 'uname', label: 'Username' },
+  { key: 'uname', label: 'Label' },
   { key: 'name', label: 'Name' },
   { key: 'address', label: 'Address' },
   { key: 'address2', label: 'Address 2' },

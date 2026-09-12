@@ -96,6 +96,78 @@ export function matchesSearch(
   return haystack.includes(normalized)
 }
 
+export type SortKey = 'id' | 'uname' | 'name' | 'address' | 'city' | 'state' | 'zip'
+export type SortDirection = 'asc' | 'desc'
+
+export interface SortableRow {
+  id: string
+  record: Record<string, unknown>
+}
+
+const NUMERIC_ID = /^\d+$/
+
+function valueForSort(
+  key: Exclude<SortKey, 'id'>,
+  record: Record<string, unknown>,
+): string {
+  if (key === 'name') {
+    return recordName(record)
+  }
+  if (key === 'address') {
+    return displayAddress(record)
+  }
+  const value = record[key]
+  return typeof value === 'string' ? value : ''
+}
+
+export function compareRows(
+  a: SortableRow,
+  b: SortableRow,
+  key: SortKey,
+  direction: SortDirection,
+): number {
+  if (key === 'id') {
+    const aNumeric = NUMERIC_ID.test(a.id) ? Number(a.id) : null
+    const bNumeric = NUMERIC_ID.test(b.id) ? Number(b.id) : null
+    const base =
+      aNumeric !== null && bNumeric !== null
+        ? aNumeric - bNumeric
+        : aNumeric !== null
+          ? -1
+          : bNumeric !== null
+            ? 1
+            : a.id.localeCompare(b.id)
+    return direction === 'asc' ? base : -base
+  }
+
+  const aValue = valueForSort(key, a.record)
+  const bValue = valueForSort(key, b.record)
+  const aEmpty = aValue === ''
+  const bEmpty = bValue === ''
+  if (aEmpty && bEmpty) {
+    return 0
+  }
+  if (aEmpty) {
+    return 1
+  }
+  if (bEmpty) {
+    return -1
+  }
+
+  const aLower = aValue.toLowerCase()
+  const bLower = bValue.toLowerCase()
+  const base = aLower < bLower ? -1 : aLower > bLower ? 1 : 0
+  return direction === 'asc' ? base : -base
+}
+
+export function sortRows(
+  rows: SortableRow[],
+  key: SortKey,
+  direction: SortDirection,
+): SortableRow[] {
+  return [...rows].sort((a, b) => compareRows(a, b, key, direction))
+}
+
 export function displayAddress(record: Record<string, unknown>): string {
   return [record['address'], record['address2']]
     .filter((value): value is string => typeof value === 'string' && value !== '')

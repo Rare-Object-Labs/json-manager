@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchRecords, saveChanges } from './api'
+import { fetchRecords, saveChanges, selectFile } from './api'
 import type { ApiError } from './api'
 import {
   applyAdd,
@@ -11,14 +11,15 @@ import {
   recordName,
   serializeJson,
   sortedEntries,
+  sortRows,
 } from './lib/db'
-import type { DatabaseFile } from './lib/db'
+import type { DatabaseFile, SortDirection, SortKey } from './lib/db'
 import { RecordForm } from './components/RecordForm'
 import { RecordTable } from './components/RecordTable'
 import type { TableRow } from './components/RecordTable'
 import './App.css'
 
-type LoadStatus = 'loading' | 'config-missing' | 'ready' | 'error'
+type LoadStatus = 'loading' | 'ready' | 'error'
 
 type EditorState = null | { mode: 'add' } | { mode: 'edit'; id: string }
 
@@ -32,6 +33,7 @@ const ERROR_TITLES: Record<string, string> = {
   permission_denied: 'Permission denied',
   backup_failed: 'Backup failed',
   save_failed: 'Save failed',
+  picker_failed: 'File chooser error',
   network: 'Connection problem',
   unexpected: 'Unexpected error',
 }
@@ -46,40 +48,60 @@ export default function App() {
   const [working, setWorking] = useState<DatabaseFile | null>(null)
   const [snapshotText, setSnapshotText] = useState('')
   const [loadError, setLoadError] = useState<ApiError | null>(null)
+  const [fileError, setFileError] = useState<ApiError | null>(null)
   const [saveError, setSaveError] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState('')
   const [editor, setEditor] = useState<EditorState>(null)
+  const [sortKey, setSortKey] = useState<SortKey>('id')
+  const [sortDir, setSortDir] = useState<SortDirection>('asc')
 
   const workingText = useMemo(() => (working ? serializeJson(working) : ''), [working])
   const dirty = working !== null && workingText !== snapshotText
   const recordCount = working ? Object.keys(working._default).length : 0
 
-  const loadResult = useCallback((result: Awaited<ReturnType<typeof fetchRecords>>) => {
-    if (!result.ok) {
-      setStatus('error')
-      setLoadError(result.error)
-      return
-    }
-    const data = result.data
-    if (!data.configured) {
-      setStatus('config-missing')
-      setLoadError(null)
-      return
-    }
-    if (!data.struct || typeof data.fileName !== 'string') {
-      setStatus('error')
-      setLoadError({ code: 'unexpected', message: 'The local API returned an unexpected response.' })
-      return
-    }
-    const fresh = cloneJson(data.struct)
-    setFileName(data.fileName)
+  const applyFile = useCallback((nextFileName: string, struct: DatabaseFile) => {
+    const fresh = cloneJson(struct)
+    setFileName(nextFileName)
     setWorking(fresh)
     setSnapshotText(serializeJson(fresh))
     setLoadError(null)
+    setFileError(null)
     setSaveError(null)
     setStatus('ready')
+    setSearch('')
+    setEditor(null)
   }, [])
+
+  const loadResult = useCallback(
+    (result: Awaited<ReturnType<typeof fetchRecords>>) => {
+      if (!result.ok) {
+        setStatus('error')
+        setLoadError(result.error)
+        return
+      }
+      const data = result.data
+      if (!data.configured) {
+        setFileName('')
+        setWorking(null)
+        setSnapshotText('')
+        setLoadError(null)
+        setSaveError(null)
+        setStatus('ready')
+        return
+      }
+      if (!data.struct || typeof data.fileName !== 'string') {
+        setStatus('error')
+        setLoadError({
+          code: 'unexpected',
+          message: 'The local API returned an unexpected response.',
+        })
+        return
+      }
+      applyFile(data.fileName, data.struct)
+    },
+    [applyFile],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -112,6 +134,35 @@ export default function App() {
     setBusy(true)
     const result = await fetchRecords()
     loadResult(result)
+    setBusy(false)
+  }
+
+  async function handleChooseFile() {
+    if (dirty && !window.confirm('Discard unsaved changes and choose a different JSON file?')) {
+      return
+    }
+    setBusy(true)
+    setFileError(null)
+    const result = await selectFile()
+    if (!result.ok) {
+      setFileError(result.error)
+      setBusy(false)
+      return
+    }
+    const data = result.data
+    if (data.cancelled) {
+      setBusy(false)
+      return
+    }
+    if (!data.configured || !data.struct || typeof data.fileName !== 'string') {
+      setFileError({
+        code: 'unexpected',
+        message: 'The local API returned an unexpected response.',
+      })
+      setBusy(false)
+      return
+    }
+    applyFile(data.fileName, data.struct)
     setBusy(false)
   }
 
@@ -160,14 +211,27 @@ export default function App() {
     }
   }
 
+  function requestSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((direction) => (direction === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
   const rows: TableRow[] = useMemo(() => {
     if (!working) {
       return []
     }
-    return sortedEntries(working._default)
-      .filter(([id, record]) => matchesSearch(id, record, search))
-      .map(([id, record]) => ({ id, record }))
-  }, [working, search])
+    return sortRows(
+      sortedEntries(working._default)
+        .filter(([id, record]) => matchesSearch(id, record, search))
+        .map(([id, record]) => ({ id, record })),
+      sortKey,
+      sortDir,
+    )
+  }, [working, search, sortKey, sortDir])
 
   const addRecordId = working ? nextNumericId(working._default) : ''
 
@@ -181,17 +245,29 @@ export default function App() {
           </span>
         </div>
         <div className="file-meta">
-          {fileName && <span className="file-chip">{fileName}</span>}
+          {fileName ? (
+            <span className="file-chip">{fileName}</span>
+          ) : (
+            <span>No file selected</span>
+          )}
           <span>
             {recordCount} {recordCount === 1 ? 'record' : 'records'}
           </span>
+          <button
+            type="button"
+            className="button"
+            onClick={handleChooseFile}
+            disabled={busy || status === 'loading'}
+          >
+            Choose File
+          </button>
         </div>
         <div className="toolbar">
           <button
             type="button"
             className="button"
             onClick={reloadFromDisk}
-            disabled={status !== 'ready' || busy}
+            disabled={status !== 'ready' || !fileName || busy}
           >
             Reload from Disk
           </button>
@@ -213,20 +289,22 @@ export default function App() {
           </p>
         )}
 
-        {status === 'config-missing' && (
-          <section className="config-missing">
-            <h2>JSON_MANAGER_FILE is not set</h2>
+        {status === 'ready' && !fileName && (
+          <section className="empty-state">
+            <h2>No file selected</h2>
             <p>
-              JSON Manager needs a local JSON file to open. Set the{' '}
-              <code>JSON_MANAGER_FILE</code> environment variable before starting the app.
+              JSON Manager reads and edits one structured JSON file at a time. Click Choose File to
+              pick a file, or set the <code>JSON_MANAGER_FILE</code> environment variable before
+              starting the app to open one automatically.
             </p>
-            <ol>
-              <li>
-                Create <code>.env.local</code> in this project and add{' '}
-                <code>JSON_MANAGER_FILE=C:\path\to\db.json</code>.
-              </li>
-              <li>Restart the app with <code>npm run dev</code> (or <code>npm run preview</code>).</li>
-            </ol>
+            <button
+              type="button"
+              className="button primary"
+              onClick={handleChooseFile}
+              disabled={busy}
+            >
+              Choose File
+            </button>
           </section>
         )}
 
@@ -234,6 +312,13 @@ export default function App() {
           <div className="error-banner" role="alert">
             <strong>{errorTitle(loadError.code)}</strong>
             <span>{loadError.message}</span>
+          </div>
+        )}
+
+        {fileError && (
+          <div className="error-banner" role="alert">
+            <strong>{errorTitle(fileError.code)}</strong>
+            <span>{fileError.message}</span>
           </div>
         )}
 
@@ -268,6 +353,9 @@ export default function App() {
             ) : (
               <RecordTable
                 rows={rows}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onSort={requestSort}
                 onEdit={(id) => setEditor({ mode: 'edit', id })}
                 onDelete={requestDelete}
               />

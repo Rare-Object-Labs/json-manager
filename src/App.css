@@ -115,21 +115,26 @@
   border-radius: 0.5rem;
 }
 
-.config-missing {
-  max-width: 46rem;
-  padding: 1.25rem 1.5rem;
+.empty-state {
+  max-width: 42rem;
+  padding: 1.5rem 1.75rem;
   border: 1px solid var(--border);
-  border-left: 4px solid #b45309;
+  border-left: 4px solid var(--accent);
   border-radius: 0.5rem;
   background: var(--surface);
 }
 
-.config-missing h2 {
+.empty-state h2 {
   margin: 0 0 0.5rem;
   font-size: 1.1rem;
 }
 
-.config-missing code {
+.empty-state p {
+  margin: 0 0 1rem;
+  color: var(--muted);
+}
+
+.empty-state code {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.85em;
   background: #f1f5f9;
@@ -200,6 +205,29 @@
   text-transform: uppercase;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.sort-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sort-button:hover {
+  color: var(--text);
+}
+
+.sort-indicator {
+  font-size: 0.7rem;
+  line-height: 1;
 }
 
 .record-table td {

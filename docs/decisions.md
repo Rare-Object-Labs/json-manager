@@ -42,6 +42,16 @@ Record durable technical choices here so future contributors understand their co
 
 **Consequences:** The app runs entirely locally in the Vite dev/preview server process. Saves go through a validated backup-then-atomic-write sequence so the original file stays intact on any failure. This is an explicit exception to the starter's frontend-only default, documented here and in the architecture notes.
 
+## ADR-005: Native Windows file chooser with in-memory active file
+
+**Status:** Accepted
+
+**Context:** The user manages multiple JSON files in different folders and needs to switch between them from inside the app. A browser file input is unusable for this: it does not provide a filesystem path the local API can later save back to.
+
+**Decision:** Add a `POST /api/select-file` endpoint that opens a native Windows `OpenFileDialog` through PowerShell (`System.Windows.Forms`), using Node's built-in `child_process`. The server keeps an in-memory active-file path, seeded from `JSON_MANAGER_FILE` at startup, replaced only when a selected file passes the exact same validation used elsewhere, and used for all subsequent reads, saves, and backups. The app starts in a usable "no file selected" state when no environment variable is set.
+
+**Consequences:** No new npm dependency and no HTML file input needed; no recent-file history or settings database is persisted. This is explicitly Windows-focused — the chooser requires Windows and there is no cross-platform abstraction yet.
+
 ## New decision template
 
 Copy this section for future decisions:

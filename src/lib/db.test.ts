@@ -9,8 +9,9 @@ import {
   nextNumericId,
   recordName,
   serializeJson,
+  sortRows,
 } from './db'
-import type { DatabaseFile } from './db'
+import type { DatabaseFile, SortableRow } from './db'
 
 function sampleRecords() {
   return {
@@ -93,6 +94,27 @@ describe('serializeJson', () => {
   })
 })
 
+describe('uname field preservation', () => {
+  it('keeps uname unchanged when other fields are edited', () => {
+    const records = { '5': { uname: 'Storefront', name: 'Old Name', zip: '08901' } }
+    const next = applyEdit(records, '5', { name: 'New Name', zip: '94105' })
+    expect(next['5'].uname).toBe('Storefront')
+    expect(next['5'].name).toBe('New Name')
+  })
+
+  it('keeps uname values through serialization', () => {
+    const struct: DatabaseFile = {
+      _default: {
+        '2': { uname: 'Mobile', name: 'A' },
+        '3': { uname: 'Pickup', name: 'B' },
+      },
+    }
+    const text = serializeJson(struct)
+    expect(text).toContain('"uname": "Mobile"')
+    expect(text).toContain('"uname": "Pickup"')
+  })
+})
+
 describe('cloneJson', () => {
   it('returns an independent deep copy', () => {
     const original = { _default: { '2': { name: 'A' } } } as DatabaseFile
@@ -127,5 +149,107 @@ describe('search and display helpers', () => {
   it('reads the record name from the name field', () => {
     expect(recordName({ name: 'Tobi' })).toBe('Tobi')
     expect(recordName({})).toBe('')
+  })
+})
+
+function sortableRows(): SortableRow[] {
+  return [
+    {
+      id: '10',
+      record: {
+        uname: 'Storefront Beta',
+        name: 'Beta',
+        address: '10 Beta Rd',
+        address2: '',
+        city: 'Reno',
+        state: 'NV',
+        zip: '89501',
+      },
+    },
+    {
+      id: '2',
+      record: {
+        uname: 'Storefront Alpha',
+        name: 'Alpha',
+        address: '2 Alpha Way',
+        address2: 'Bldg 2',
+        city: 'Athens',
+        state: 'AL',
+        zip: '35611',
+      },
+    },
+    { id: '7', record: { uname: '', name: '', city: '', state: '', zip: '', address: '' } },
+  ]
+}
+
+describe('sortRows', () => {
+  it('sorts ID numerically ascending', () => {
+    const rows = sortRows(sortableRows(), 'id', 'asc')
+    expect(rows.map((r) => r.id)).toEqual(['2', '7', '10'])
+  })
+
+  it('sorts ID numerically descending', () => {
+    const rows = sortRows(sortableRows(), 'id', 'desc')
+    expect(rows.map((r) => r.id)).toEqual(['10', '7', '2'])
+  })
+
+  it('sorts Name case-insensitively ascending', () => {
+    const rows = sortRows(sortableRows(), 'name', 'asc')
+    expect(rows[0].record.name).toBe('Alpha')
+    expect(rows[1].record.name).toBe('Beta')
+  })
+
+  it('sorts Name case-insensitively descending', () => {
+    const rows = sortRows(sortableRows(), 'name', 'desc')
+    expect(rows[0].record.name).toBe('Beta')
+    expect(rows[1].record.name).toBe('Alpha')
+  })
+
+  it('sorts Label (uname) case-insensitively ascending', () => {
+    const rows = sortRows(sortableRows(), 'uname', 'asc')
+    expect(rows.map((r) => r.record.uname)).toEqual(['Storefront Alpha', 'Storefront Beta', ''])
+  })
+
+  it('sorts Label (uname) case-insensitively descending', () => {
+    const rows = sortRows(sortableRows(), 'uname', 'desc')
+    expect(rows.map((r) => r.record.uname)).toEqual(['Storefront Beta', 'Storefront Alpha', ''])
+  })
+
+  it('sorts City and State ascending', () => {
+    const byCity = sortRows(sortableRows(), 'city', 'asc')
+    expect(byCity.map((r) => r.record.city)).toEqual(['Athens', 'Reno', ''])
+    const byState = sortRows(sortableRows(), 'state', 'asc')
+    expect(byState.map((r) => r.record.state)).toEqual(['AL', 'NV', ''])
+  })
+
+  it('sorts ZIP as text ascending', () => {
+    const rows = sortRows(sortableRows(), 'zip', 'asc')
+    expect(rows.map((r) => r.record.zip)).toEqual(['35611', '89501', ''])
+  })
+
+  it('keeps empty values after populated values in both directions', () => {
+    const ascending = sortRows(sortableRows(), 'state', 'asc')
+    expect(ascending[ascending.length - 1].id).toBe('7')
+    const descending = sortRows(sortableRows(), 'state', 'desc')
+    expect(descending[descending.length - 1].id).toBe('7')
+  })
+
+  it('uses the combined address display value for sorting', () => {
+    const rows = sortRows(sortableRows(), 'address', 'asc')
+    expect(rows.map((r) => displayAddress(r.record))).toEqual([
+      '10 Beta Rd',
+      '2 Alpha Way, Bldg 2',
+      '',
+    ])
+  })
+
+  it('does not mutate the input rows or their records', () => {
+    const rows = sortableRows()
+    const original = JSON.stringify(rows)
+    const result = sortRows(rows, 'name', 'asc')
+    expect(result).not.toBe(rows)
+    expect(rows.map((r) => r.id)).toEqual(['10', '2', '7'])
+    expect(JSON.stringify(rows)).toBe(original)
+    expect(result[0].record).toBe(rows[1].record)
   })
 })

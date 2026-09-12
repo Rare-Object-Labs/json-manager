@@ -41,7 +41,8 @@ The React frontend is served by Vite. A small local Node API is registered as Vi
 
 The API:
 
-- reads `JSON_MANAGER_FILE` directly from disk and returns its records
+- loads the current JSON file and returns its records
+- lets the user choose a different JSON file at any time through a native Windows file dialog (see below)
 - validates that the file is valid JSON with a `_default` object
 - validates every saved document before writing
 - creates a timestamped backup in a `db-backups` folder beside the file before each save
@@ -60,7 +61,13 @@ The API:
 
 ## Pointing it at your db.json
 
-The app needs the `JSON_MANAGER_FILE` environment variable on the Node side. Set it to an absolute path to your JSON file.
+The app manages one JSON file at a time. There are two ways to choose it:
+
+**From the UI (recommended).** Click **Choose File** in the header. The app opens a native Windows file dialog (powered by PowerShell and Windows Forms) that filters for `*.json` files. The app reads and validates the chosen file before making it the active file, and still writes saves and backups to exactly that file. If you have unsaved edits, you are asked for confirmation before switching. Selecting a file never modifies it.
+
+> The chooser is currently Windows-only. It is the primary mechanism because a browser file input does not expose a filesystem path the local API can later save back to.
+
+**At startup with an environment variable.** The `JSON_MANAGER_FILE` environment variable on the Node side is still supported as the initial/default file. Set it to an absolute path to your JSON file.
 
 PowerShell, for one session:
 
@@ -75,7 +82,7 @@ Or create a `.env.local` file in this project (it is git-ignored) with:
 JSON_MANAGER_FILE=C:\path\to\db.json
 ```
 
-If `JSON_MANAGER_FILE` is unset, the UI shows a configuration message instead of crashing.
+If `JSON_MANAGER_FILE` is unset, the app starts with no file selected and offers **Choose File** instead of blocking on a configuration screen.
 
 ## Available commands
 
@@ -98,11 +105,15 @@ If multiple backups share a timestamp, a numeric suffix is appended. The origina
 
 ## Unsaved changes
 
-All edits happen in the in-memory working copy. Nothing is written until **Save Changes** is clicked. While there are unsaved changes the header shows an indicator, the browser warns before refresh/navigation, and **Reload from Disk** asks for confirmation before discarding your local changes.
+All edits happen in the in-memory working copy. Nothing is written until **Save Changes** is clicked. While there are unsaved changes the header shows an indicator, the browser warns before refresh/navigation, and **Reload from Disk** and **Choose File** both ask for confirmation before discarding your local changes.
+
+## Sorting
+
+Every table column except **Actions** is sortable by clicking its header: click once for ascending, again for descending, and on a different column to start ascending there. Sorting is client-side only and never changes the underlying record order or the JSON file; it applies to whatever rows match the current search.
 
 ## Environment variables
 
-- `JSON_MANAGER_FILE` — Node-side path to the JSON file to manage. Not exposed to browser code; the UI only shows the filename.
+- `JSON_MANAGER_FILE` — Node-side path to the initial JSON file to manage. Not exposed to browser code; the UI only shows the filename. When unset, use **Choose File** in the app to pick a file.
 - `POC_DOMAIN` — deployment metadata, not exposed to browser code.
 - Browser-visible variables must use the `VITE_` prefix. Do not commit secrets.
 
@@ -133,7 +144,7 @@ eslint.config.js       ESLint flat configuration
 
 ## Testing
 
-`npm test` runs Vitest. Coverage includes parsing and rejecting the `_default` structure, preserving ZIP strings, next-ID calculation, add/edit/delete operations, serialization, and backup/atomic-write behavior.
+`npm test` runs Vitest. Coverage includes parsing and rejecting the `_default` structure, preserving ZIP strings, next-ID calculation, add/edit/delete operations, serialization, backup/atomic-write behavior, client-side table sorting, the choose-file API flow (cancel, switch, invalid files, save/backup of the new file), and the app's no-file-selected state.
 
 ## Customizing the template
 

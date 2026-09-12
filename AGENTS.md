@@ -4,8 +4,10 @@ This repository is the `JSON Manager` application, created from the reusable `ap
 
 ## Working agreement
 
-- Keep the application a local utility. The only backend surface is the small Node file API in `server/`; keep it minimal and restricted to reading and writing the configured `JSON_MANAGER_FILE`.
+- Keep the application a local utility. The only backend surface is the small Node file API in `server/`; keep it minimal and restricted to reading and writing the currently active JSON file.
+- The API keeps an in-memory active-file path seeded from `JSON_MANAGER_FILE` at startup. The native file chooser (`POST /api/select-file`) is Windows-only and powered by PowerShell/Windows Forms via `node:child_process`; do not add a cross-platform abstraction, do not persist recent-file history or settings.
 - Do not add a database, authentication, Supabase, cloud storage, deployment work, or unnecessary frameworks/libraries.
+- Do not add JSX runtime dependencies or a UI framework; prefer plain CSS.
 - Use React, TypeScript, and Vite; preserve strict TypeScript checks.
 - Preserve record IDs, ZIP strings, unknown properties, and existing values; never silently normalize or renumber data.
 - Prefer small, accessible components and plain CSS over unnecessary dependencies.

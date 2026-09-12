@@ -11,9 +11,12 @@ import {
   createBackup,
   readTextFile,
 } from './persistence'
+import type { FilePickResult } from './select-file'
 
 export interface ApiDeps {
   jsonFile: () => string | undefined
+  setJsonFile: (filePath: string) => void
+  pickJsonFile: () => Promise<FilePickResult>
 }
 
 export interface ApiError {
@@ -32,8 +35,9 @@ const STATUS_BY_CODE: Record<string, number> = {
   invalid_record_structure: 400,
   file_not_found: 404,
   permission_denied: 403,
-  backup_failed: 500,
+backup_failed: 500,
   save_failed: 500,
+  picker_failed: 500,
   unexpected: 500,
 }
 
@@ -78,8 +82,12 @@ async function handleRequest(
       return void (await handleGetRecords(res, deps))
     }
 
-    if (url.pathname === '/api/save' && req.method === 'POST') {
+if (url.pathname === '/api/save' && req.method === 'POST') {
       return void (await handleSave(req, res, deps))
+    }
+
+    if (url.pathname === '/api/select-file' && req.method === 'POST') {
+      return void (await handleSelectFile(res, deps))
     }
 
     return sendError(res, 404, 'not_found', 'No such API endpoint.')
@@ -153,6 +161,39 @@ async function handleSave(
   }
 
   return sendJson(res, 200, { ok: true })
+}
+
+async function handleSelectFile(
+  res: ServerResponse,
+  deps: ApiDeps,
+): Promise<void> {
+  const picked = await deps.pickJsonFile()
+  if (!picked.ok) {
+    if (picked.reason === 'cancelled') {
+      return sendJson(res, 200, { cancelled: true })
+    }
+    return sendError(res, 500, 'picker_failed', picked.message)
+  }
+
+  const filePath = picked.filePath
+  const read = await readTextFile(filePath)
+  if (!read.ok) {
+    return sendApiError(res, read.error.code, read.error.message)
+  }
+
+  const parsed = parseJsonStructure(read.content)
+  if (!parsed.ok) {
+    return sendApiError(res, parsed.code, MESSAGE_BY_STRUCTURE_CODE[parsed.code])
+  }
+
+  deps.setJsonFile(filePath)
+
+  return sendJson(res, 200, {
+    configured: true,
+    fileName: basename(filePath),
+    defaultName: '_default',
+    struct: parsed.struct,
+  })
 }
 
 function sendApiError(
